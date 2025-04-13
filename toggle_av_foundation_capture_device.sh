@@ -1,1 +1,0 @@
-     defaults write com.apple.avfoundation AVCaptureDevice -bool false
