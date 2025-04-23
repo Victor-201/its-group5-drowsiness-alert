@@ -132,10 +132,8 @@ class DrowsinessDetector:
             self.face_detected = False
             if self.no_face_counter >= self.NO_FACE_CONSEC_FRAMES:
                 frame = self.alert_system.render_distraction_alert(frame)
-                self.analyzer.show_camera_feed(frame)
                 return frame, True
             cv2.putText(frame, "Không phát hiện khuôn mặt", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, self.config.ALERT_COLOR, 2)
-            self.analyzer.show_camera_feed(frame)
             return frame, False
 
         self.no_face_counter = 0
@@ -212,7 +210,6 @@ class DrowsinessDetector:
 
         cv2.putText(frame, f"Khuôn mặt: {len(faces)} (Xử lý lớn nhất)",
                     (frame.shape[1] - 250, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.config.TEXT_COLOR, 1)
-        self.analyzer.show_camera_feed(frame)
         return frame, drowsiness_detected or head_tilt_detected or rapid_blink_detected
 
     def draw_facial_ratios(self, frame, shape_np):

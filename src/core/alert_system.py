@@ -33,6 +33,8 @@ class AlertSystem:
         if duration:
             cv2.putText(frame, f"Thời gian ngủ: {duration:.1f}s", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                         self.config.ALERT_COLOR, 2)
+
+        return frame
             
 
     def render_distraction_alert(self, frame):
