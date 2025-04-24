@@ -31,7 +31,10 @@ class Config:
     MODEL_DAT_BZ2 = os.path.join(DATA_DIR, "shape_predictor_68_face_landmarks.dat.bz2")
     CALIB_FILE = os.path.join(DATA_DIR, "calibration.pkl")
     ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
-    ALERT_SOUND_FILE = os.path.join(ASSETS_DIR, "alert.wav")
+    SOUND_DIR = os.path.join(ASSETS_DIR, "sounds")
+    ALERT_SOUND_FILE = os.path.join(SOUND_DIR, "alert.wav")
+    FONT_DIR = os.path.join(ASSETS_DIR, "fonts")
+    FONT_PATH = os.path.join(FONT_DIR, "arial.ttf")
     FACIAL_LANDMARKS_INDEXES = {
         "right_eye": (36, 42),
         "left_eye": (42, 48),
