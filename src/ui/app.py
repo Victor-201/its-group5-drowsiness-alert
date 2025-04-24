@@ -6,6 +6,7 @@ from kivy.uix.image import Image
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from kivy.core.audio import SoundLoader
+from kivy.graphics import Color, Rectangle
 import cv2
 from src.core.detector import DrowsinessDetector
 from src.configs.config import Config
@@ -17,8 +18,8 @@ class DrowsinessDetectorApp(App):
         super().__init__()
         self.config = Config()
         self.detector = DrowsinessDetector()
-        self.image = Image(size_hint=(1, 0.8))
-        self.status_label = Label(text='Status: Stopped', size_hint=(1, 0.1))
+        self.image = Image(size_hint=(1, 1))
+        self.status_label = Label(text='Trạng thái: Đã dừng', size_hint=(1, 0.1))
         self.camera_initialized = False
         self.alert_sound = None
         sound_path = self.config.ALERT_SOUND_FILE
@@ -34,16 +35,74 @@ class DrowsinessDetectorApp(App):
         self.alert_stop_delay = self.config.ALERT_STOP_DELAY
         self.calibration_event = None
         self.calibration_start_time = None
+        self.background_color = [0, 0, 0, 1]  # Default: black
 
     def build(self):
-        layout = BoxLayout(orientation='vertical')
-        controls = BoxLayout(size_hint=(1, 0.1), spacing=10)
-        controls.add_widget(Button(text='Start', on_press=self.start_monitoring))
-        controls.add_widget(Button(text='Stop', on_press=self.stop_monitoring))
-        controls.add_widget(Button(text='Calibrate', on_press=self.calibrate))
-        layout.add_widget(self.status_label)
-        layout.add_widget(self.image)
-        layout.add_widget(controls)
+        # Main layout (vertical)
+        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+
+        # Set up background color
+        with main_layout.canvas.before:
+            Color(*self.background_color)
+            self.background_rect = Rectangle(pos=main_layout.pos, size=main_layout.size)
+        
+        # Bind update to layout size/position changes
+        main_layout.bind(pos=self.update_background_rect, size=self.update_background_rect)
+
+        # Header layout for buttons
+        header = BoxLayout(size_hint=(1, 0.1), spacing=10)
+
+        # Exit button (left)
+        exit_button = Button(
+            text='Thoát',
+            size_hint=(0.25, 1),
+            background_color=(1, 0, 0, 1),  # Red for exit
+            on_press=self.exit_app
+        )
+
+        # Start button
+        start_button = Button(
+            text='Bắt đầu',
+            size_hint=(0.25, 1),
+            background_color=(0, 1, 0, 1),  # Green for start
+            on_press=self.start_monitoring
+        )
+
+        # Stop button
+        stop_button = Button(
+            text='Dừng',
+            size_hint=(0.25, 1),
+            background_color=(1, 0.5, 0, 1),  # Orange for stop
+            on_press=self.stop_monitoring
+        )
+
+        # Calibrate button (right)
+        calibrate_button = Button(
+            text='Hiệu chỉnh',
+            size_hint=(0.25, 1),
+            background_color=(0, 0, 1, 1),  # Blue for calibrate
+            on_press=self.calibrate
+        )
+
+        # Add buttons to header
+        header.add_widget(exit_button)
+        header.add_widget(start_button)
+        header.add_widget(stop_button)
+        header.add_widget(calibrate_button)
+
+        # Notification area
+        notification_area = self.status_label
+
+        # Wrapper for camera feed
+        wrapper = BoxLayout(size_hint=(1, 0.8))
+        wrapper.add_widget(self.image)
+
+        # Add components to main layout
+        main_layout.add_widget(header)
+        main_layout.add_widget(notification_area)
+        main_layout.add_widget(wrapper)
+
+        # Initialize camera
         try:
             self.detector.start_camera()
             self.camera_initialized = True
@@ -51,8 +110,24 @@ class DrowsinessDetectorApp(App):
         except Exception as e:
             logging.error(f"Khởi tạo camera thất bại: {e}")
             self.status_label.text = 'Lỗi: Không khởi tạo được camera'
+
+        # Schedule updates
         Clock.schedule_interval(self._update_wrapper, 1.0 / 30.0)
-        return layout
+        return main_layout
+
+    def update_background_rect(self, instance, value):
+        self.background_rect.pos = instance.pos
+        self.background_rect.size = instance.size
+
+    def update_background_color(self):
+        with self.root.canvas.before:
+            Color(*self.background_color)
+            self.background_rect = Rectangle(pos=self.root.pos, size=self.root.size)
+
+    def exit_app(self, instance):
+        logging.info("Thoát ứng dụng")
+        self.stop_monitoring(instance)
+        App.get_running_app().stop()
 
     def _update_wrapper(self, dt):
         if self.is_monitoring and self.camera_initialized:
@@ -67,6 +142,8 @@ class DrowsinessDetectorApp(App):
             return
         self.is_monitoring = True
         self.status_label.text = 'Trạng thái: Đang giám sát'
+        self.background_color = [0, 0, 0, 1]  # Reset to black
+        self.update_background_color()
         logging.info("Bắt đầu giám sát")
 
     def stop_monitoring(self, instance):
@@ -81,6 +158,8 @@ class DrowsinessDetectorApp(App):
         if self.calibration_event:
             self.calibration_event.cancel()
             self.calibration_event = None
+        self.background_color = [0, 0, 0, 1]  # Reset to black
+        self.update_background_color()
         logging.info("Dừng giám sát")
 
     def calibrate(self, instance):
@@ -90,8 +169,10 @@ class DrowsinessDetectorApp(App):
             return
         self.is_monitoring = False
         self.status_label.text = 'Trạng thái: Đang hiệu chỉnh...'
+        self.background_color = [0, 0, 0, 1]  # Reset to black
+        self.update_background_color()
         logging.info("Bắt đầu hiệu chỉnh")
-        self.detector.reset_calibration()  
+        self.detector.reset_calibration()
         self.calibration_start_time = Clock.get_time()
         self.calibration_event = Clock.schedule_interval(self.update_calibration, 1.0 / 30.0)
 
@@ -105,6 +186,8 @@ class DrowsinessDetectorApp(App):
             self.status_label.text = f'Trạng thái: Hiệu chỉnh hoàn tất (EAR: {new_threshold:.3f})' if success else 'Trạng thái: Hiệu chỉnh thất bại'
             logging.info(f"Hiệu chỉnh {'hoàn tất' if success else 'thất bại'}. Ngưỡng EAR mới: {new_threshold:.3f}" if success else "Hiệu chỉnh thất bại")
             self.image.texture = None
+            self.background_color = [0, 0, 0, 1]  # Reset to black
+            self.update_background_color()
             return
         frame, ear = self.detector.process_calibration_frame()
         if frame is not None:
@@ -124,15 +207,21 @@ class DrowsinessDetectorApp(App):
                 if drowsiness_detected and not self.alert_active:
                     self.status_label.text = 'CẢNH BÁO: Phát hiện buồn ngủ!'
                     self.alert_active = True
+                    self.background_color = [1, 0, 0, 1]  # Red for alert
+                    self.update_background_color()
                     logging.info("Phát hiện buồn ngủ")
                     self.start_alert()
                 elif not drowsiness_detected and self.alert_active and not self.alert_stop_timer:
                     self.alert_stop_timer = Clock.schedule_once(self.stop_alert, self.alert_stop_delay)
                 elif not self.alert_active:
                     self.status_label.text = 'Trạng thái: Đang giám sát'
+                    self.background_color = [0, 0, 0, 1]  # Black when no alert
+                    self.update_background_color()
         except Exception as e:
             logging.error(f"Lỗi xử lý khung hình: {e}")
             self.status_label.text = 'Lỗi: Xử lý khung hình thất bại'
+            self.background_color = [0, 0, 0, 1]  # Reset to black
+            self.update_background_color()
 
     def start_alert(self):
         logging.info("Bắt đầu phát âm thanh cảnh báo")
@@ -140,6 +229,8 @@ class DrowsinessDetectorApp(App):
         self.alert_sound.stop()
         self.alert_sound.loop = True
         self.alert_sound.play()
+        self.background_color = [1, 0, 0, 1]  # Red for alert
+        self.update_background_color()
         if self.alert_stop_timer:
             self.alert_stop_timer.cancel()
             self.alert_stop_timer = None
@@ -150,10 +241,12 @@ class DrowsinessDetectorApp(App):
             self.alert_sound.stop()
         self.alert_stop_timer = None
         self.status_label.text = 'Trạng thái: Đang giám sát'
+        self.background_color = [0, 0, 0, 1]  # Reset to black
+        self.update_background_color()
         logging.info("Dừng cảnh báo")
 
     def on_stop(self):
-        logging.info("Dọn 함정자원")
+        logging.info("Dọn dẹp tài nguyên")
         if self.alert_stop_timer:
             self.alert_stop_timer.cancel()
         if self.alert_sound:
@@ -161,3 +254,5 @@ class DrowsinessDetectorApp(App):
         if self.calibration_event:
             self.calibration_event.cancel()
         self.detector.stop_camera()
+        self.background_color = [0, 0, 0, 1]  # Reset to black
+        self.update_background_color()

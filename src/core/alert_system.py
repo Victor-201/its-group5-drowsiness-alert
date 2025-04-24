@@ -21,16 +21,6 @@ class AlertSystem:
     def put_text_unicode(self, frame, text, position, color, font_size):
         """
         Vẽ văn bản tiếng Việt lên khung hình OpenCV bằng PIL.
-        
-        Args:
-            frame: Khung hình OpenCV (numpy array, BGR).
-            text: Văn bản cần vẽ (hỗ trợ tiếng Việt).
-            position: Vị trí (x, y) để vẽ văn bản.
-            color: Màu chữ (BGR, ví dụ: (255, 255, 255)).
-            font_size: Kích thước phông chữ.
-        
-        Returns:
-            Khung hình đã được vẽ văn bản.
         """
         # Chuyển khung hình OpenCV (BGR) sang PIL (RGB)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -54,6 +44,35 @@ class AlertSystem:
         # Chuyển lại sang định dạng OpenCV
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
+    def center_text(self, frame, text, font_size, color):
+        """
+        Căn giữa văn bản trong khung hình cả theo chiều ngang và dọc.
+        """
+        # Tải phông chữ
+        if font_size not in self._font_cache:
+            try:
+                logger.info(f"Đang tải phông chữ từ: {self.config.FONT_PATH}")
+                self._font_cache[font_size] = ImageFont.truetype(self.config.FONT_PATH, font_size)
+            except Exception as e:
+                logger.error(f"Không thể tải phông chữ {self.config.FONT_PATH}: {e}")
+                self._font_cache[font_size] = ImageFont.load_default()
+        
+        font = self._font_cache[font_size]
+
+        # Đo kích thước văn bản
+        temp_image = Image.new('RGB', (frame.shape[1], frame.shape[0]))
+        draw = ImageDraw.Draw(temp_image)
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+
+        # Tính toán vị trí để căn giữa
+        text_x = (frame.shape[1] - text_width) // 2
+        text_y = (frame.shape[0] - text_height) // 2
+
+        # Vẽ văn bản
+        return self.put_text_unicode(frame, text, (text_x, text_y), color, font_size)
+
     def render_drowsiness_alert(self, frame, duration=None):
         # Hiển thị cảnh báo buồn ngủ
         overlay = frame.copy()
@@ -62,10 +81,9 @@ class AlertSystem:
         cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
         alert_text = "CẢNH BÁO BUỒN NGỦ!"
-        text_size = cv2.getTextSize(alert_text, cv2.FONT_HERSHEY_SIMPLEX, 1.5, 3)[0]
-        text_x, text_y = (frame.shape[1] - text_size[0]) // 2, (frame.shape[0] + text_size[1]) // 2
-        frame = self.put_text_unicode(frame, alert_text, (text_x, text_y), self.config.ALERT_COLOR, font_size=40)
+        frame = self.center_text(frame, alert_text, font_size=40, color=self.config.ALERT_COLOR)
 
+        # Vẽ thời gian ngủ (nếu có) ở vị trí cố định
         if duration:
             duration_text = f"Thời gian ngủ: {duration:.1f}s"
             frame = self.put_text_unicode(frame, duration_text, (20, 150), self.config.ALERT_COLOR, font_size=20)
@@ -79,9 +97,7 @@ class AlertSystem:
         cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
 
         alert_text = "KHÔNG PHÁT HIỆN TÀI XẾ!"
-        text_size = cv2.getTextSize(alert_text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        text_x = (frame.shape[1] - text_size[0]) // 2
-        frame = self.put_text_unicode(frame, alert_text, (text_x, 100), self.config.ALERT_COLOR, font_size=30)
+        frame = self.center_text(frame, alert_text, font_size=30, color=self.config.ALERT_COLOR)
         return frame
 
     def render_head_tilt_alert(self, frame):
@@ -92,9 +108,7 @@ class AlertSystem:
         cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
         alert_text = "CẢNH BÁO TƯ THẾ ĐẦU!"
-        text_size = cv2.getTextSize(alert_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)[0]
-        text_x = (frame.shape[1] - text_size[0]) // 2
-        frame = self.put_text_unicode(frame, alert_text, (text_x, frame.shape[0] // 2), (255, 255, 255), font_size=35)
+        frame = self.center_text(frame, alert_text, font_size=35, color=(255, 255, 255))
         return frame
 
     def render_fatigue_alert(self, frame):
@@ -105,9 +119,7 @@ class AlertSystem:
         cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
         alert_text = "CẢNH BÁO MỆT MỎI MẮT!"
-        text_size = cv2.getTextSize(alert_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
-        text_x, text_y = (frame.shape[1] - text_size[0]) // 2, (frame.shape[0] + text_size[1]) // 2
-        frame = self.put_text_unicode(frame, alert_text, (text_x, text_y), self.config.ALERT_COLOR, font_size=30)
+        frame = self.center_text(frame, alert_text, font_size=30, color=self.config.ALERT_COLOR)
         return frame
 
     def render_status_bar(self, frame, ear, ear_threshold):
