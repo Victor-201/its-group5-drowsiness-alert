@@ -10,11 +10,12 @@ class Config:
     # Cấu hình ngưỡng và thông số
     EAR_THRESHOLD = 0.22
     MAR_THRESHOLD = 0.5
-    EAR_CONSEC_FRAMES = 20
+    EAR_CONSEC_FRAMES = 15
     BLINK_CONSEC_FRAMES = 3
     NO_FACE_ALERT_FRAMES = 60
     HEAD_TILT_THRESHOLD = 15
     HEAD_TILT_FRAMES = 20
+
     ALERT_COOLDOWN = 3
     ALERT_STOP_DELAY = 1.0
     CAMERA_ID = 0
@@ -30,6 +31,7 @@ class Config:
     MODEL_DAT = os.path.join(DATA_DIR, "shape_predictor_68_face_landmarks.dat")
     MODEL_DAT_BZ2 = os.path.join(DATA_DIR, "shape_predictor_68_face_landmarks.dat.bz2")
     CALIB_FILE = os.path.join(DATA_DIR, "calibration.pkl")
+    SETTINGS_FILE = os.path.join(DATA_DIR, "settings.pkl")
     ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
     SOUND_DIR = os.path.join(ASSETS_DIR, "sounds")
     ALERT_SOUND_FILE = os.path.join(SOUND_DIR, "alert.wav")
@@ -63,3 +65,25 @@ class Config:
         except Exception as e:
             logger.error(f"Tải hiệu chỉnh thất bại: {e}")
         return False
+
+    def save_settings(self, settings_data):
+        try:
+            os.makedirs(self.DATA_DIR, exist_ok=True)
+            with open(self.SETTINGS_FILE, 'wb') as f:
+                pickle.dump(settings_data, f)
+            logger.info("Lưu cài đặt thành công")
+            return True
+        except Exception as e:
+            logger.error(f"Lưu cài đặt thất bại: {e}")
+            return False
+
+    def load_settings(self):
+        try:
+            if os.path.exists(self.SETTINGS_FILE):
+                with open(self.SETTINGS_FILE, 'rb') as f:
+                    settings_data = pickle.load(f)
+                    logger.info("Tải cài đặt thành công")
+                    return settings_data
+        except Exception as e:
+            logger.error(f"Tải cài đặt thất bại: {e}")
+        return None

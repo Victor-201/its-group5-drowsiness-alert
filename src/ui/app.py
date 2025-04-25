@@ -1,17 +1,23 @@
+# app.py
+import os
+import cv2
+import logging
 from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.label import Label
 from kivy.uix.image import Image
+from kivy.uix.label import Label
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
-from kivy.core.audio import SoundLoader
 from kivy.graphics import Color, Rectangle
-import cv2
+from kivy.core.audio import SoundLoader
+from kivy.uix.screenmanager import ScreenManager
 from src.core.detector import DrowsinessDetector
 from src.configs.config import Config
-import os
-import logging
+from src.configs.settings import Settings
+from src.ui.screens.main_screen import MainScreen
+from src.ui.screens.settings_screen import SettingsScreen
+
+
+logger = logging.getLogger(__name__)
 
 class DrowsinessDetectorApp(App):
     def __init__(self):
@@ -20,87 +26,52 @@ class DrowsinessDetectorApp(App):
         self.detector = DrowsinessDetector()
         self.image = Image(size_hint=(1, 1))
         self.status_label = Label(text='Trạng thái: Đã dừng', size_hint=(1, 0.1))
+        self.settings = Settings()
+        self.sound_dir = self.config.SOUND_DIR  # Initialize sound_dir first
+        self.alert_sound_file = self.config.ALERT_SOUND_FILE
+        self.initialize_app()
+
+
+    def initialize_app(self):
         self.camera_initialized = False
         self.alert_sound = None
-        sound_path = self.config.ALERT_SOUND_FILE
+        self.setup_alert_sound()
+        self.setup_state_variables()
+
+    def setup_alert_sound(self):
+        default_sound = os.path.join(self.sound_dir, "alert.wav")
+        sound_path = (
+            os.path.join(self.sound_dir, self.settings.alert_sound_file) 
+            if self.settings.alert_sound_file 
+            else default_sound
+        )
         if os.path.exists(sound_path):
             self.alert_sound = SoundLoader.load(sound_path)
             if not self.alert_sound:
                 logging.warning(f"Không thể tải file âm thanh: {sound_path}")
         else:
             logging.warning(f"File âm thanh không tồn tại: {sound_path}")
+
+    def setup_state_variables(self):
         self.is_monitoring = False
         self.alert_active = False
         self.alert_stop_timer = None
         self.alert_stop_delay = self.config.ALERT_STOP_DELAY
         self.calibration_event = None
         self.calibration_start_time = None
-        self.background_color = [0, 0, 0, 1]  # Default: black
+        self.background_color = [0, 0, 0, 1]
+        self.screen_manager = None
 
     def build(self):
-        # Main layout (vertical)
-        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-
-        # Set up background color
-        with main_layout.canvas.before:
-            Color(*self.background_color)
-            self.background_rect = Rectangle(pos=main_layout.pos, size=main_layout.size)
+        self.screen_manager = ScreenManager()
         
-        # Bind update to layout size/position changes
-        main_layout.bind(pos=self.update_background_rect, size=self.update_background_rect)
-
-        # Header layout for buttons
-        header = BoxLayout(size_hint=(1, 0.1), spacing=10)
-
-        # Exit button (left)
-        exit_button = Button(
-            text='Thoát',
-            size_hint=(0.25, 1),
-            background_color=(1, 0, 0, 1),  # Red for exit
-            on_press=self.exit_app
-        )
-
-        # Start button
-        start_button = Button(
-            text='Bắt đầu',
-            size_hint=(0.25, 1),
-            background_color=(0, 1, 0, 1),  # Green for start
-            on_press=self.start_monitoring
-        )
-
-        # Stop button
-        stop_button = Button(
-            text='Dừng',
-            size_hint=(0.25, 1),
-            background_color=(1, 0.5, 0, 1),  # Orange for stop
-            on_press=self.stop_monitoring
-        )
-
-        # Calibrate button (right)
-        calibrate_button = Button(
-            text='Hiệu chỉnh',
-            size_hint=(0.25, 1),
-            background_color=(0, 0, 1, 1),  # Blue for calibrate
-            on_press=self.calibrate
-        )
-
-        # Add buttons to header
-        header.add_widget(exit_button)
-        header.add_widget(start_button)
-        header.add_widget(stop_button)
-        header.add_widget(calibrate_button)
-
-        # Notification area
-        notification_area = self.status_label
-
-        # Wrapper for camera feed
-        wrapper = BoxLayout(size_hint=(1, 0.8))
-        wrapper.add_widget(self.image)
-
-        # Add components to main layout
-        main_layout.add_widget(header)
-        main_layout.add_widget(notification_area)
-        main_layout.add_widget(wrapper)
+        # Add Main Screen
+        main_screen = MainScreen(app_instance=self, name='main')
+        self.screen_manager.add_widget(main_screen)
+        
+        # Add Settings Screen
+        settings_screen = SettingsScreen(name='settings', app_instance=self)
+        self.screen_manager.add_widget(settings_screen)
 
         # Initialize camera
         try:
@@ -113,16 +84,22 @@ class DrowsinessDetectorApp(App):
 
         # Schedule updates
         Clock.schedule_interval(self._update_wrapper, 1.0 / 30.0)
-        return main_layout
+        return self.screen_manager
 
-    def update_background_rect(self, instance, value):
-        self.background_rect.pos = instance.pos
-        self.background_rect.size = instance.size
+    def switch_to_settings(self):
+        self.screen_manager.current = 'settings'
+        logging.info("Chuyển sang màn hình cài đặt")
+
+    def switch_to_main(self):
+        self.screen_manager.current = 'main'
+        logging.info("Chuyển về màn hình chính")
 
     def update_background_color(self):
-        with self.root.canvas.before:
-            Color(*self.background_color)
-            self.background_rect = Rectangle(pos=self.root.pos, size=self.root.size)
+        if self.screen_manager.current == 'main':
+            main_screen = self.screen_manager.get_screen('main')
+            with main_screen.canvas.before:
+                Color(*self.background_color)
+                main_screen.background_rect = Rectangle(pos=main_screen.pos, size=main_screen.size)
 
     def exit_app(self, instance):
         logging.info("Thoát ứng dụng")
@@ -154,7 +131,8 @@ class DrowsinessDetectorApp(App):
         if self.alert_stop_timer:
             self.alert_stop_timer.cancel()
             self.alert_stop_timer = None
-            self.alert_sound.stop()
+            if self.alert_sound:
+                self.alert_sound.stop()
         if self.calibration_event:
             self.calibration_event.cancel()
             self.calibration_event = None
@@ -204,6 +182,7 @@ class DrowsinessDetectorApp(App):
                 texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
                 texture.blit_buffer(cv2.flip(frame, 0).tobytes(), colorfmt='bgr', bufferfmt='ubyte')
                 self.image.texture = texture
+
                 if drowsiness_detected and not self.alert_active:
                     self.status_label.text = 'CẢNH BÁO: Phát hiện buồn ngủ!'
                     self.alert_active = True
@@ -226,9 +205,11 @@ class DrowsinessDetectorApp(App):
     def start_alert(self):
         logging.info("Bắt đầu phát âm thanh cảnh báo")
         self.alert_active = True
-        self.alert_sound.stop()
-        self.alert_sound.loop = True
-        self.alert_sound.play()
+        if self.alert_sound:
+            self.alert_sound.stop()
+            self.alert_sound.loop = True
+            self.alert_sound.volume = self.settings.alert_volume / 100.0
+            self.alert_sound.play()
         self.background_color = [1, 0, 0, 1]  # Red for alert
         self.update_background_color()
         if self.alert_stop_timer:
