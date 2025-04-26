@@ -9,12 +9,16 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 class Config:
     # Cấu hình ngưỡng và thông số
     EAR_THRESHOLD = 0.22
-    MAR_THRESHOLD = 0.5
+    YAWN_THRESHOLD = 0.3
     EAR_CONSEC_FRAMES = 15
     BLINK_CONSEC_FRAMES = 3
+    YAWN_CONSEC_FRAMES = 5
     NO_FACE_ALERT_FRAMES = 60
     HEAD_TILT_THRESHOLD = 15
     HEAD_TILT_FRAMES = 20
+    BLINK_PER_MINUTE_THRESHOLD = 25
+    YAWN_PER_MINUTE_THRESHOLD = 3
+    NOTIFICATION_DURATION = 3.0
 
     ALERT_COOLDOWN = 3
     ALERT_STOP_DELAY = 1.0
@@ -36,6 +40,7 @@ class Config:
     IMAGE_DIR = os.path.join(ASSETS_DIR, "images")
     SOUND_DIR = os.path.join(ASSETS_DIR, "sounds")
     ALERT_SOUND_FILE = os.path.join(SOUND_DIR, "alert.wav")
+    FATIGUE_SOUND_FILE = os.path.join(SOUND_DIR, "message.wav")
     FONT_DIR = os.path.join(ASSETS_DIR, "fonts")
     FONT_PATH = os.path.join(FONT_DIR, "arial.ttf")
     FACIAL_LANDMARKS_INDEXES = {

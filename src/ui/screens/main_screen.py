@@ -8,14 +8,13 @@ from kivy.graphics import Color, Rectangle, PushMatrix, Rotate, PopMatrix
 from kivy.properties import NumericProperty, ListProperty, BooleanProperty
 import time
 
-
 class StatusBar(Widget):
     value = NumericProperty(0.0)
     max_value = NumericProperty(1.0)
     threshold = NumericProperty(0.0)
     angle = NumericProperty(0.0)
-    reverse_threshold = BooleanProperty(False)  # For EAR
-    bar_color = ListProperty([0, 1, 0, 1])  # Default green
+    reverse_threshold = BooleanProperty(False)
+    bar_color = ListProperty([0, 1, 0, 1])
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -23,45 +22,33 @@ class StatusBar(Widget):
                   reverse_threshold=self.update_bar, size=self.update_bar, pos=self.update_bar)
         self.bar_length = 150
         self.bar_height = 20
-        self.blink_state = 1.0  # For blinking effect
+        self.blink_state = 1.0
         self.update_bar()
 
     def update_bar(self, *args):
         self.canvas.clear()
         with self.canvas:
-            # Center the bar horizontally
             bar_x = self.x + (self.width - self.bar_length) / 2
             bar_y = self.y + (self.height - self.bar_height) / 2
-
-            # Update color based on threshold and reverse_threshold
             if self.reverse_threshold:
                 is_safe = self.value >= self.threshold
             else:
                 is_safe = self.value < self.threshold
-
-            # Apply blinking effect if not safe (alert condition)
             if not is_safe:
-                self.blink_state = 0.5 + 0.5 * abs(np.sin(time.time() * 5))  # Blinking frequency
-                self.bar_color = [1, 0, 0, self.blink_state]  # Red with blinking opacity
+                self.blink_state = 0.5 + 0.5 * abs(np.sin(time.time() * 5))
+                self.bar_color = [1, 0, 0, self.blink_state]
             else:
                 self.blink_state = 1.0
-                self.bar_color = [0, 1, 0, 1]  # Green if safe
-
-            # Calculate filled length based on value ratio
+                self.bar_color = [0, 1, 0, 1]
             filled_length = min(int(self.bar_length * (self.value / self.max_value)),
                                 self.bar_length) if self.max_value > 0 else 0
-
-            # Draw background bar
-            Color(0.2, 0.2, 0.2, 1)  # Dark gray
+            Color(0.2, 0.2, 0.2, 1)
             Rectangle(pos=(bar_x, bar_y), size=(self.bar_length, self.bar_height))
-
-            # Draw filled bar with rotation
             Color(*self.bar_color)
             PushMatrix()
             Rotate(angle=self.angle, origin=(bar_x + self.bar_length / 2, bar_y + self.bar_height / 2))
             Rectangle(pos=(bar_x, bar_y), size=(filled_length, self.bar_height))
             PopMatrix()
-
 
 class MainScreen(Screen):
     def __init__(self, app_instance, **kwargs):
@@ -70,19 +57,12 @@ class MainScreen(Screen):
         self.build()
 
     def build(self):
-        # Main layout (vertical)
         main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-
-        # Set up background color
         with main_layout.canvas.before:
             Color(*self.app.background_color)
             self.background_rect = Rectangle(pos=main_layout.pos, size=main_layout.size)
-
         main_layout.bind(pos=self.update_background_rect, size=self.update_background_rect)
-
-        # Header layout for buttons
         header = BoxLayout(size_hint=(1, 0.1), spacing=10)
-
         buttons = [
             ('Thoát', (1, 0, 0, 1), self.app.exit_app),
             ('Bắt đầu', (0, 1, 0, 1), self.app.start_monitoring),
@@ -90,7 +70,6 @@ class MainScreen(Screen):
             ('Hiệu chỉnh', (0, 0, 1, 1), self.app.calibrate),
             ('Cài đặt', (0.5, 0.5, 0.5, 1), lambda instance: self.app.switch_to_settings(instance))
         ]
-
         for text, color, callback in buttons:
             button = Button(
                 text=text,
@@ -99,11 +78,7 @@ class MainScreen(Screen):
                 on_press=callback
             )
             header.add_widget(button)
-
-        # Main content area (horizontal layout for camera and metrics)
         content_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.8), spacing=10)
-
-        # Left side: Metrics display
         metrics_layout = BoxLayout(orientation='vertical', size_hint=(0.3, 1), spacing=5)
         self.metrics_widgets = {
             'ear': {
@@ -165,33 +140,38 @@ class MainScreen(Screen):
                     text_size=(None, None),
                     padding_x=10
                 ),
-                'bar': StatusBar(value=0.0, max_value=10.0, threshold=5.0, size_hint=(1, 0.1))
+                'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1))
+            },
+            'yawn_count': {
+                'label': Label(
+                    text='Ngáp: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1))
             }
         }
         for metric in self.metrics_widgets.values():
             metrics_layout.add_widget(metric['label'])
             metrics_layout.add_widget(metric['bar'])
         content_layout.add_widget(metrics_layout)
-
-        # Right side: Camera feed
         camera_layout = BoxLayout(size_hint=(0.7, 1))
         camera_layout.add_widget(self.app.image)
         content_layout.add_widget(camera_layout)
-
-        # Add components to main layout
         main_layout.add_widget(header)
         main_layout.add_widget(self.app.status_label)
         main_layout.add_widget(content_layout)
-
         self.add_widget(main_layout)
 
     def update_background_rect(self, instance, value):
         self.background_rect.pos = instance.pos
         self.background_rect.size = instance.size
 
-    def update_metrics(self, ear, mar, roll_angle, pitch_angle, blink_count):
-        """Cập nhật các thông số và thanh trạng thái trên giao diện."""
-
+    def update_metrics(self, ear, mar, roll_angle, pitch_angle, blink_count, yawn_count=None):
         def safe_float(value, default=None):
             if value is None:
                 return default
@@ -199,20 +179,14 @@ class MainScreen(Screen):
                 return float(value)
             except (TypeError, ValueError):
                 return default
-
-        # Check if an alert is active
         is_alert = self.app.alert_active
-
-        # Update EAR
-        ear_value = safe_float(ear, None)  # Use None to retain last bar value
+        ear_value = safe_float(ear, None)
         self.metrics_widgets['ear']['label'].text = f'EAR: {ear:.2f}' if ear is not None else 'EAR: --'
         self.metrics_widgets['ear']['label'].color = [1, 0, 0,
                                                       1] if is_alert and ear is not None and ear_value < self.app.ear_threshold else [
             1, 1, 1, 1]
         if ear is not None:
             self.metrics_widgets['ear']['bar'].value = ear_value
-
-        # Update MAR
         mar_value = safe_float(mar, None)
         self.metrics_widgets['mar']['label'].text = f'MAR: {mar:.2f}' if mar is not None else 'MAR: --'
         self.metrics_widgets['mar']['label'].color = [1, 0, 0,
@@ -220,8 +194,6 @@ class MainScreen(Screen):
                                                                                                                    1, 1]
         if mar is not None:
             self.metrics_widgets['mar']['bar'].value = mar_value
-
-        # Update Roll Angle
         roll_value = safe_float(roll_angle, None)
         self.metrics_widgets['roll_angle'][
             'label'].text = f'Góc nghiêng: {roll_angle:.1f}°' if roll_angle is not None else 'Góc nghiêng: --'
@@ -230,8 +202,6 @@ class MainScreen(Screen):
             1, 1, 1, 1]
         if roll_angle is not None:
             self.metrics_widgets['roll_angle']['bar'].value = roll_value
-
-        # Update Pitch Angle
         pitch_value = safe_float(pitch_angle, None)
         self.metrics_widgets['pitch_angle'][
             'label'].text = f'Góc cúi: {pitch_angle:.1f}°' if pitch_angle is not None else 'Góc cúi: --'
@@ -240,13 +210,17 @@ class MainScreen(Screen):
             1, 1, 1, 1]
         if pitch_angle is not None:
             self.metrics_widgets['pitch_angle']['bar'].value = pitch_value
-
-        # Update Blink Count
-        blink_value = safe_float(blink_count, None)
+        blink_value = safe_float(blink_count, 0)
         self.metrics_widgets['blink_count'][
-            'label'].text = f'Nháy mắt: {blink_count}' if blink_count is not None else 'Nháy mắt: --'
+            'label'].text = f'Nháy mắt: {int(blink_count)}' if blink_count is not None else 'Nháy mắt: 0'
         self.metrics_widgets['blink_count']['label'].color = [1, 0, 0,
-                                                              1] if is_alert and blink_count is not None and blink_value > 5.0 else [
+                                                              1] if is_alert and self.app.detector.check_blink_frequency() else [
             1, 1, 1, 1]
-        if blink_count is not None:
-            self.metrics_widgets['blink_count']['bar'].value = blink_value
+        self.metrics_widgets['blink_count']['bar'].value = blink_value
+        yawn_value = safe_float(yawn_count, 0)
+        self.metrics_widgets['yawn_count'][
+            'label'].text = f'Ngáp: {int(yawn_count)}' if yawn_count is not None else 'Ngáp: 0'
+        self.metrics_widgets['yawn_count']['label'].color = [1, 0, 0,
+                                                             1] if is_alert and self.app.detector.check_yawn_frequency() else [
+            1, 1, 1, 1]
+        self.metrics_widgets['yawn_count']['bar'].value = yawn_value
