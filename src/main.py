@@ -19,4 +19,4 @@ if __name__ == '__main__':
         app = DrowsinessDetectorApp()
         app.run()
     except Exception as e:
-        logging.error(f"Ứng dụng gặp lỗi: {e}")
+        logging.error(f"Ứng dụng gặp lỗi: {e}") 

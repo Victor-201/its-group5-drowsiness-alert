@@ -33,6 +33,7 @@ class Config:
     CALIB_FILE = os.path.join(DATA_DIR, "calibration.pkl")
     SETTINGS_FILE = os.path.join(DATA_DIR, "settings.pkl")
     ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
+    IMAGE_DIR = os.path.join(ASSETS_DIR, "images")
     SOUND_DIR = os.path.join(ASSETS_DIR, "sounds")
     ALERT_SOUND_FILE = os.path.join(SOUND_DIR, "alert.wav")
     FONT_DIR = os.path.join(ASSETS_DIR, "fonts")

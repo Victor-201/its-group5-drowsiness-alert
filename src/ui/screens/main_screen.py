@@ -88,7 +88,7 @@ class MainScreen(Screen):
             ('Bắt đầu', (0, 1, 0, 1), self.app.start_monitoring),
             ('Dừng', (1, 0.5, 0, 1), self.app.stop_monitoring),
             ('Hiệu chỉnh', (0, 0, 1, 1), self.app.calibrate),
-            ('Cài đặt', (0.5, 0.5, 0.5, 1), lambda instance: self.app.switch_to_settings())
+            ('Cài đặt', (0.5, 0.5, 0.5, 1), lambda instance: self.app.switch_to_settings(instance))
         ]
 
         for text, color, callback in buttons:

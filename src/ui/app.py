@@ -29,8 +29,12 @@ class DrowsinessDetectorApp(App):
         self.status_label = Label(text='Trạng thái: Đã dừng', size_hint=(1, 0.1))
         self.settings = Settings()
         self.sound_dir = self.config.SOUND_DIR
+        self.image_dir = self.config.IMAGE_DIR
         self.alert_sound_file = self.config.ALERT_SOUND_FILE
         self.ear_threshold = self.config.EAR_THRESHOLD
+        self.camera_width = self.config.CAMERA_WIDTH
+        self.camera_height = self.config.CAMERA_HEIGHT
+        self.camera_fps = self.config.CAMERA_FPS
         self.initialize_app()
         # Store last valid metrics to avoid resetting to 0
         self.last_metrics = {
@@ -95,7 +99,8 @@ class DrowsinessDetectorApp(App):
         Clock.schedule_interval(self._update_wrapper, 1.0 / 30.0)
         return self.screen_manager
 
-    def switch_to_settings(self):
+    def switch_to_settings(self, instance):
+        self.stop_monitoring(instance)
         self.screen_manager.current = 'settings'
         logging.info("Chuyển sang màn hình cài đặt")
         # Update metrics with last valid values
@@ -165,11 +170,10 @@ class DrowsinessDetectorApp(App):
         self.alert_active = False
         self.status_label.text = 'Trạng thái: Đã dừng'
         self.image.texture = None
+        self.alert_sound.stop()
         if self.alert_stop_timer:
             self.alert_stop_timer.cancel()
             self.alert_stop_timer = None
-            if self.alert_sound:
-                self.alert_sound.stop()
         if self.calibration_event:
             self.calibration_event.cancel()
             self.calibration_event = None
@@ -191,7 +195,7 @@ class DrowsinessDetectorApp(App):
             self.status_label.text = 'Lỗi: Camera chưa khởi tạo'
             logging.error("Không thể hiệu chỉnh: Camera chưa khởi tạo")
             return
-        self.is_monitoring = False
+        self.stop_monitoring(instance)
         self.status_label.text = 'Trạng thái: Đang hiệu chỉnh...'
         self.background_color = [0, 0, 0, 1]  # Reset to black
         self.update_background_color()
