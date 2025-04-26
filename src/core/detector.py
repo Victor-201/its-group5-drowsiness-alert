@@ -156,11 +156,7 @@ class DrowsinessDetector:
                     head_tilt_detected = True
             else:
                 self.head_tilt_counter = max(0, self.head_tilt_counter - 1)
-            frame = self.alert_system.put_text_unicode(frame, f"EAR: {ear:.2f}", (20, 30), self.config.TEXT_COLOR, font_size=22)
-            frame = self.alert_system.put_text_unicode(frame, f"Góc nghiêng: {roll_angle:.1f} độ", (20, 50), self.config.TEXT_COLOR, font_size=22)
-            frame = self.alert_system.put_text_unicode(frame, f"Góc cúi: {pitch_angle:.1f} độ", (20, 70), self.config.TEXT_COLOR, font_size=22)
-            blink_color = self.config.ALERT_COLOR if rapid_blink_detected else self.config.TEXT_COLOR
-            frame = self.alert_system.put_text_unicode(frame, f"Nháy mắt: {self.blink_total}", (20, 90), blink_color, font_size=22)
+            # Removed rendering of metrics and status bar on video
             if ear < self.EYE_AR_THRESH:
                 self.eye_counter += 1
                 if self.eye_counter == 1:
@@ -172,12 +168,6 @@ class DrowsinessDetector:
             else:
                 self.eye_counter = 0
                 self.drowsiness_start_time = None
-            frame = self.alert_system.render_status_bar(frame, ear, self.EYE_AR_THRESH)
-            metrics = [
-                f"EAR: {ear:.2f} (Ngưỡng: {self.EYE_AR_THRESH:.2f})",
-                f"Nháy mắt: {self.blink_total}"
-            ]
-            
             if head_tilt_detected:
                 frame = self.alert_system.render_head_tilt_alert(frame)
             if rapid_blink_detected:
@@ -192,10 +182,7 @@ class DrowsinessDetector:
         cv2.polylines(frame, [shape_np[42:48]], True, self.config.PRIMARY_COLOR, 1)
         cv2.polylines(frame, [shape_np[48:60]], True, self.config.PRIMARY_COLOR, 1)
         cv2.polylines(frame, [shape_np[27:36]], True, self.config.PRIMARY_COLOR, 1)
-        face_width = np.linalg.norm(shape_np[0] - shape_np[16])
-        face_height = np.linalg.norm(shape_np[27] - shape_np[8])
-        ratio = face_width / face_height if face_height > 0 else 0
-        frame = self.alert_system.put_text_unicode(frame, f"Tỷ lệ khuôn mặt: {ratio:.2f}", (20, 110), self.config.TEXT_COLOR, font_size=20)
+        # Removed face ratio text rendering
         return frame
 
     def reset_calibration(self):

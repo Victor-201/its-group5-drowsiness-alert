@@ -2,6 +2,7 @@
 import os
 import cv2
 import logging
+import numpy as np
 from kivy.app import App
 from kivy.uix.image import Image
 from kivy.uix.label import Label
@@ -16,8 +17,8 @@ from src.configs.settings import Settings
 from src.ui.screens.main_screen import MainScreen
 from src.ui.screens.settings_screen import SettingsScreen
 
-
 logger = logging.getLogger(__name__)
+
 
 class DrowsinessDetectorApp(App):
     def __init__(self):
@@ -27,10 +28,18 @@ class DrowsinessDetectorApp(App):
         self.image = Image(size_hint=(1, 1))
         self.status_label = Label(text='Trạng thái: Đã dừng', size_hint=(1, 0.1))
         self.settings = Settings()
-        self.sound_dir = self.config.SOUND_DIR  # Initialize sound_dir first
+        self.sound_dir = self.config.SOUND_DIR
         self.alert_sound_file = self.config.ALERT_SOUND_FILE
+        self.ear_threshold = self.config.EAR_THRESHOLD
         self.initialize_app()
-
+        # Store last valid metrics to avoid resetting to 0
+        self.last_metrics = {
+            'ear': None,
+            'mar': None,
+            'roll_angle': None,
+            'pitch_angle': None,
+            'blink_count': None
+        }
 
     def initialize_app(self):
         self.camera_initialized = False
@@ -41,8 +50,8 @@ class DrowsinessDetectorApp(App):
     def setup_alert_sound(self):
         default_sound = os.path.join(self.sound_dir, "alert.wav")
         sound_path = (
-            os.path.join(self.sound_dir, self.settings.alert_sound_file) 
-            if self.settings.alert_sound_file 
+            os.path.join(self.sound_dir, self.settings.alert_sound_file)
+            if self.settings.alert_sound_file
             else default_sound
         )
         if os.path.exists(sound_path):
@@ -64,11 +73,11 @@ class DrowsinessDetectorApp(App):
 
     def build(self):
         self.screen_manager = ScreenManager()
-        
+
         # Add Main Screen
         main_screen = MainScreen(app_instance=self, name='main')
         self.screen_manager.add_widget(main_screen)
-        
+
         # Add Settings Screen
         settings_screen = SettingsScreen(name='settings', app_instance=self)
         self.screen_manager.add_widget(settings_screen)
@@ -89,10 +98,28 @@ class DrowsinessDetectorApp(App):
     def switch_to_settings(self):
         self.screen_manager.current = 'settings'
         logging.info("Chuyển sang màn hình cài đặt")
+        # Update metrics with last valid values
+        main_screen = self.screen_manager.get_screen('main')
+        main_screen.update_metrics(
+            self.last_metrics['ear'],
+            self.last_metrics['mar'],
+            self.last_metrics['roll_angle'],
+            self.last_metrics['pitch_angle'],
+            self.last_metrics['blink_count']
+        )
 
     def switch_to_main(self):
         self.screen_manager.current = 'main'
         logging.info("Chuyển về màn hình chính")
+        # Update metrics with last valid values
+        main_screen = self.screen_manager.get_screen('main')
+        main_screen.update_metrics(
+            self.last_metrics['ear'],
+            self.last_metrics['mar'],
+            self.last_metrics['roll_angle'],
+            self.last_metrics['pitch_angle'],
+            self.last_metrics['blink_count']
+        )
 
     def update_background_color(self):
         if self.screen_manager.current == 'main':
@@ -111,6 +138,16 @@ class DrowsinessDetectorApp(App):
             self.update()
         elif self.calibration_event and self.camera_initialized:
             self.update_calibration(dt)
+        else:
+            # Update metrics with last valid values when not monitoring or calibrating
+            main_screen = self.screen_manager.get_screen('main')
+            main_screen.update_metrics(
+                self.last_metrics['ear'],
+                self.last_metrics['mar'],
+                self.last_metrics['roll_angle'],
+                self.last_metrics['pitch_angle'],
+                self.last_metrics['blink_count']
+            )
 
     def start_monitoring(self, instance):
         if not self.camera_initialized:
@@ -138,6 +175,15 @@ class DrowsinessDetectorApp(App):
             self.calibration_event = None
         self.background_color = [0, 0, 0, 1]  # Reset to black
         self.update_background_color()
+        # Update metrics with last valid values
+        main_screen = self.screen_manager.get_screen('main')
+        main_screen.update_metrics(
+            self.last_metrics['ear'],
+            self.last_metrics['mar'],
+            self.last_metrics['roll_angle'],
+            self.last_metrics['pitch_angle'],
+            self.last_metrics['blink_count']
+        )
         logging.info("Dừng giám sát")
 
     def calibrate(self, instance):
@@ -162,10 +208,20 @@ class DrowsinessDetectorApp(App):
             self.calibration_event.cancel()
             self.calibration_event = None
             self.status_label.text = f'Trạng thái: Hiệu chỉnh hoàn tất (EAR: {new_threshold:.3f})' if success else 'Trạng thái: Hiệu chỉnh thất bại'
-            logging.info(f"Hiệu chỉnh {'hoàn tất' if success else 'thất bại'}. Ngưỡng EAR mới: {new_threshold:.3f}" if success else "Hiệu chỉnh thất bại")
+            logging.info(
+                f"Hiệu chỉnh {'hoàn tất' if success else 'thất bại'}. Ngưỡng EAR mới: {new_threshold:.3f}" if success else "Hiệu chỉnh thất bại")
             self.image.texture = None
             self.background_color = [0, 0, 0, 1]  # Reset to black
             self.update_background_color()
+            # Update metrics with last valid values
+            main_screen = self.screen_manager.get_screen('main')
+            main_screen.update_metrics(
+                self.last_metrics['ear'],
+                self.last_metrics['mar'],
+                self.last_metrics['roll_angle'],
+                self.last_metrics['pitch_angle'],
+                self.last_metrics['blink_count']
+            )
             return
         frame, ear = self.detector.process_calibration_frame()
         if frame is not None:
@@ -174,15 +230,59 @@ class DrowsinessDetectorApp(App):
             self.image.texture = texture
             remaining = int(duration - elapsed)
             self.status_label.text = f'Đang hiệu chỉnh... {remaining}s (EAR: {ear:.2f})'
+            # Update metrics, using current EAR and last valid values for others
+            main_screen = self.screen_manager.get_screen('main')
+            main_screen.update_metrics(
+                ear if ear != 0.0 else self.last_metrics['ear'],  # Use current EAR if valid
+                self.last_metrics['mar'],
+                self.last_metrics['roll_angle'],
+                self.last_metrics['pitch_angle'],
+                self.last_metrics['blink_count']
+            )
 
     def update(self):
         try:
             frame, drowsiness_detected = self.detector.process_frame()
+
+            # Initialize metrics with last valid values
+            ear = self.last_metrics['ear']
+            mar = self.last_metrics['mar']
+            roll_angle = self.last_metrics['roll_angle']
+            pitch_angle = self.last_metrics['pitch_angle']
+            blink_count = self.detector.blink_total  # Always use current blink count
+
             if frame is not None:
                 texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
                 texture.blit_buffer(cv2.flip(frame, 0).tobytes(), colorfmt='bgr', bufferfmt='ubyte')
                 self.image.texture = texture
 
+                # Calculate metrics if a face is detected
+                if self.detector.face_detected:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    largest_face = self.detector.find_largest_face(self.detector.face_detector(gray))
+                    if largest_face:
+                        shape = self.detector.landmark_predictor(gray, largest_face)
+                        shape_np = np.array([[p.x, p.y] for p in shape.parts()])
+                        left_eye, right_eye = shape_np[36:42], shape_np[42:48]
+                        mouth = shape_np[48:68]
+                        ear = float((self.detector.analyzer.calculate_ear(
+                            left_eye) + self.detector.analyzer.calculate_ear(right_eye)) / 2.0)
+                        mar = float(self.detector.analyzer.calculate_mar(mouth))
+                        roll_angle, pitch_angle = self.detector.analyzer.calculate_head_pose(shape_np)
+                        roll_angle = float(roll_angle)
+                        pitch_angle = float(pitch_angle)
+                        # Update last valid metrics
+                        self.last_metrics['ear'] = ear
+                        self.last_metrics['mar'] = mar
+                        self.last_metrics['roll_angle'] = roll_angle
+                        self.last_metrics['pitch_angle'] = pitch_angle
+                        self.last_metrics['blink_count'] = blink_count
+
+                # Update metrics on main screen, using last valid values if current ones are None
+                main_screen = self.screen_manager.get_screen('main')
+                main_screen.update_metrics(ear, mar, roll_angle, pitch_angle, blink_count)
+
+                # Handle alert logic
                 if drowsiness_detected and not self.alert_active:
                     self.status_label.text = 'CẢNH BÁO: Phát hiện buồn ngủ!'
                     self.alert_active = True
@@ -201,6 +301,15 @@ class DrowsinessDetectorApp(App):
             self.status_label.text = 'Lỗi: Xử lý khung hình thất bại'
             self.background_color = [0, 0, 0, 1]  # Reset to black
             self.update_background_color()
+            # Update metrics with last valid values
+            main_screen = self.screen_manager.get_screen('main')
+            main_screen.update_metrics(
+                self.last_metrics['ear'],
+                self.last_metrics['mar'],
+                self.last_metrics['roll_angle'],
+                self.last_metrics['pitch_angle'],
+                self.last_metrics['blink_count']
+            )
 
     def start_alert(self):
         logging.info("Bắt đầu phát âm thanh cảnh báo")
@@ -224,7 +333,15 @@ class DrowsinessDetectorApp(App):
         self.status_label.text = 'Trạng thái: Đang giám sát'
         self.background_color = [0, 0, 0, 1]  # Reset to black
         self.update_background_color()
-        logging.info("Dừng cảnh báo")
+        # Update metrics with last valid values
+        main_screen = self.screen_manager.get_screen('main')
+        main_screen.update_metrics(
+            self.last_metrics['ear'],
+            self.last_metrics['mar'],
+            self.last_metrics['roll_angle'],
+            self.last_metrics['pitch_angle'],
+            self.last_metrics['blink_count']
+        )
 
     def on_stop(self):
         logging.info("Dọn dẹp tài nguyên")
@@ -237,3 +354,12 @@ class DrowsinessDetectorApp(App):
         self.detector.stop_camera()
         self.background_color = [0, 0, 0, 1]  # Reset to black
         self.update_background_color()
+        # Update metrics with last valid values
+        main_screen = self.screen_manager.get_screen('main')
+        main_screen.update_metrics(
+            self.last_metrics['ear'],
+            self.last_metrics['mar'],
+            self.last_metrics['roll_angle'],
+            self.last_metrics['pitch_angle'],
+            self.last_metrics['blink_count']
+        )
