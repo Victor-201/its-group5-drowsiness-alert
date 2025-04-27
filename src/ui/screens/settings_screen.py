@@ -76,7 +76,7 @@ class SettingsScreen(Screen):
             text=f'Camera {self.app.settings.camera_index}',
             values=[f'Camera {cam}' for cam in self.app.settings.get_available_cameras()],
             size_hint=(0.6, 1),
-            background_color=(0.3, 0.3, 0.3, 1),
+            background_color=(0.5, 0.5, 0.5, 1),
             color=(1, 1, 1, 1),
             font_size='16sp'
         )
@@ -112,7 +112,7 @@ class SettingsScreen(Screen):
             text=self.app.settings.alert_sound_file or 'Mặc định',
             values=self.app.settings.get_available_sounds(),
             size_hint=(0.4, 1),
-            background_color=(0.3, 0.3, 0.3, 1),
+            background_color=(0.5, 0.5, 0.5, 1),
             color=(1, 1, 1, 1),
             font_size='16sp'
         )
