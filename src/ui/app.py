@@ -367,6 +367,9 @@ class DrowsinessDetectorApp(App):
     def start_alert(self):
         logging.info("Bắt đầu phát âm thanh cảnh báo")
         self.alert_active = True
+        if self.fatigue_sound and self.fatigue_sound.state == 'play':
+            self.fatigue_sound.stop() 
+            logging.info("Dừng âm thanh mệt mỏi để ưu tiên âm thanh cảnh báo")
         if self.alert_sound:
             self.alert_sound.stop()
             self.alert_sound.loop = True
@@ -380,6 +383,9 @@ class DrowsinessDetectorApp(App):
 
     def start_fatigue_alert(self):
         logging.info("Bắt đầu phát âm thanh thông báo mệt mỏi")
+        if self.alert_sound and self.alert_sound.state == 'play':
+            logging.info("Ưu tiên âm thanh cảnh báo alert, bỏ qua âm thanh mệt mỏi")
+            return  
         self.alert_active = True
         if self.fatigue_sound:
             self.fatigue_sound.stop()

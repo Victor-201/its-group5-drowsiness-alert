@@ -1,12 +1,29 @@
 import numpy as np
 from kivy.uix.screenmanager import Screen
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Rectangle, PushMatrix, Rotate, PopMatrix
 from kivy.properties import NumericProperty, ListProperty, BooleanProperty
+from kivy.uix.image import Image
+from kivy.clock import Clock
 import time
+
+class IconButton(Button):
+    def __init__(self, source, **kwargs):
+        super().__init__(**kwargs)
+        self.source = source
+        with self.canvas:
+            self.icon = Image(source=self.source, allow_stretch=True, keep_ratio=True)
+        self.bind(pos=self.update_icon, size=self.update_icon)
+        self.background_normal = ''
+        self.background_color = (0, 0, 0, 0)
+
+    def update_icon(self, *args):
+        self.icon.pos = self.pos
+        self.icon.size = self.size
 
 class StatusBar(Widget):
     value = NumericProperty(0.0)
@@ -15,13 +32,13 @@ class StatusBar(Widget):
     angle = NumericProperty(0.0)
     reverse_threshold = BooleanProperty(False)
     bar_color = ListProperty([0, 1, 0, 1])
-    bar_length = NumericProperty(150)  # Thêm thuộc tính bar_length
+    bar_length = NumericProperty(150)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(value=self.update_bar, threshold=self.update_bar, angle=self.update_bar,
                   reverse_threshold=self.update_bar, size=self.update_bar, pos=self.update_bar,
-                  bar_length=self.update_bar)  # Bind bar_length
+                  bar_length=self.update_bar)
         self.bar_height = 20
         self.blink_state = 1.0
         self.update_bar()
@@ -55,7 +72,6 @@ class MainScreen(Screen):
     def __init__(self, app_instance, **kwargs):
         super().__init__(**kwargs)
         self.app = app_instance
-        # Khởi tạo metrics_widgets
         self.metrics_widgets = {
             'ear': {
                 'label': Label(
@@ -131,6 +147,10 @@ class MainScreen(Screen):
                 'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1), bar_length=70)
             }
         }
+        self.scanning = False
+        self.scan_y = 0
+        self.scan_direction = -1  # -1 for downward, 1 for upward
+        self.is_calibrating = False
         self.build()
 
     def build(self):
@@ -141,25 +161,61 @@ class MainScreen(Screen):
         main_layout.bind(pos=self.update_background_rect, size=self.update_background_rect)
         
         # Header với các nút
-        header = BoxLayout(size_hint=(1, 0.1), spacing=10)
-        buttons = [
-            ('Thoát', (1, 0, 0, 1), self.app.exit_app),
+        header = FloatLayout(size_hint=(1, 0.1))
+
+        # Nút Thoát ở rìa trái
+        exit_button = Button(
+            text='Thoát',
+            size_hint=(None, None),
+            size=(100, 42),
+            pos_hint={'x': 0, 'top': 1},
+            background_color=(1, 0, 0, 1),
+            on_press=self.app.exit_app
+        )
+        header.add_widget(exit_button)
+
+        # Nhóm 3 nút ở giữa
+        middle_buttons_layout = BoxLayout(
+            size_hint=(None, None),
+            size=(300, 42),
+            pos_hint={'center_x': 0.5, 'top': 1},
+            spacing=10
+        )
+        middle_buttons = [
             ('Bắt đầu', (0, 1, 0, 1), self.app.start_monitoring),
             ('Dừng', (1, 0.5, 0, 1), self.app.stop_monitoring),
-            ('Hiệu chỉnh', (0, 0, 1, 1), self.app.calibrate),
-            ('Cài đặt', (0.5, 0.5, 0.5, 1), lambda instance: self.app.switch_to_settings(instance))
+            ('Hiệu chỉnh', (0, 0, 1, 1), self.start_calibration),
         ]
-        for text, color, callback in buttons:
+        for text, color, callback in middle_buttons:
             button = Button(
                 text=text,
-                size_hint=(0.2, 1),
+                size_hint=(0.33, 1),
                 background_color=color,
                 on_press=callback
             )
-            header.add_widget(button)
+            middle_buttons_layout.add_widget(button)
+        header.add_widget(middle_buttons_layout)
+        
+        # Nút Cài đặt với icon ở rìa phải
+        settings_button = IconButton(
+            source=f'{self.app.image_dir}/settings_button.png',
+            size_hint=(None, None),
+            size=(42, 42),
+            pos_hint={'right': 1, 'top': 1},
+            on_press=lambda instance: self.app.switch_to_settings(instance)
+        )
+        header.add_widget(settings_button)
+        
+        # Status label dưới header
+        self.app.status_label.size_hint = (1, 0.1)
+        self.app.status_label.font_size = '24sp'
+        self.app.status_label.bold = True
+        self.app.status_label.halign = 'center'
+        self.app.status_label.valign = 'middle'
+        self.app.status_label.text_size = (None, None)
         
         # Content layout
-        content_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.8), spacing=10)
+        content_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.7), spacing=10)
         metrics_layout = BoxLayout(orientation='vertical', size_hint=(0.3, 1), spacing=5)
         
         # Thêm các widget cho EAR, MAR, roll_angle, pitch_angle
@@ -168,7 +224,7 @@ class MainScreen(Screen):
             metrics_layout.add_widget(self.metrics_widgets[key]['bar'])
         
         # Tạo BoxLayout ngang cho blink_count và yawn_count
-        blink_yawn_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), spacing=10)  # Khoảng cách 10px
+        blink_yawn_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), spacing=10)
         
         # Thêm nhãn và thanh trạng thái cho blink_count
         blink_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1), spacing=5)
@@ -185,17 +241,63 @@ class MainScreen(Screen):
         # Thêm blink_yawn_layout vào metrics_layout
         metrics_layout.add_widget(blink_yawn_layout)
         
-        # Camera layout
+        # Camera layout with scanning effect
+        self.camera_layout = BoxLayout(size_hint=(0.7, 1))
+        self.camera_layout.add_widget(self.app.image)
         content_layout.add_widget(metrics_layout)
-        camera_layout = BoxLayout(size_hint=(0.7, 1))
-        camera_layout.add_widget(self.app.image)
-        content_layout.add_widget(camera_layout)
+        content_layout.add_widget(self.camera_layout)
         
         # Thêm các thành phần vào main_layout
         main_layout.add_widget(header)
         main_layout.add_widget(self.app.status_label)
         main_layout.add_widget(content_layout)
         self.add_widget(main_layout)
+
+    def start_calibration(self, instance):
+        """Start the calibration process and scanning effect."""
+        self.scanning = True
+        self.is_calibrating = True
+        self.scan_y = self.camera_layout.height  # Start at top
+        self.scan_direction = -1
+        Clock.schedule_interval(self.update_scan, 1 / 60)  # 60 FPS
+        self.app.status_label.text = "Trạng thái: Đang hiệu chỉnh..."
+        # Run calibration in a separate thread or async to avoid blocking
+        self.app.calibrate(instance)
+
+    def stop_calibration(self):
+        """Stop the scanning effect."""
+        self.scanning = False
+        self.is_calibrating = False
+        Clock.unschedule(self.update_scan)
+        self.camera_layout.canvas.after.clear()
+        self.app.status_label.text = f'Trạng thái: Hiệu chỉnh hoàn tất'
+
+    def update_scan(self, dt):
+        """Update the scanning bar position and check calibration status."""
+        if not self.scanning:
+            return
+        # Check if calibration is complete
+        if "Hiệu chỉnh hoàn tất" in self.app.status_label.text:
+            self.stop_calibration()
+            return
+        # Update scan position
+        scan_speed = self.camera_layout.height / 2  # Complete scan in 2 seconds
+        self.scan_y += self.scan_direction * scan_speed * dt
+        # Reverse direction at bounds
+        if self.scan_y <= 0:
+            self.scan_y = 0
+            self.scan_direction = 1
+        elif self.scan_y >= self.camera_layout.height:
+            self.scan_y = self.camera_layout.height
+            self.scan_direction = -1
+        # Draw scanning bar
+        self.camera_layout.canvas.after.clear()
+        with self.camera_layout.canvas.after:
+            Color(0, 1, 0, 0.5)  # Semi-transparent green
+            Rectangle(
+                pos=(self.camera_layout.x, self.camera_layout.y + self.scan_y - 5),
+                size=(self.camera_layout.width, 10)
+            )
 
     def update_background_rect(self, instance, value):
         self.background_rect.pos = instance.pos
