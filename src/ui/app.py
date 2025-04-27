@@ -26,7 +26,7 @@ class DrowsinessDetectorApp(App):
         self.image = Image(size_hint=(1, 1))
         self.status_label = Label(text='Trạng thái: Đã dừng', size_hint=(1, 0.1))
         self.settings = Settings()
-        self.sound_dir = self.config.SOUND_DIR
+        self.sound_alert_dir = self.config.SOUND_ALERT_DIR
         self.image_dir = self.config.IMAGE_DIR
         self.alert_sound_file = self.config.ALERT_SOUND_FILE
         self.fatigue_sound_file = self.config.FATIGUE_SOUND_FILE
@@ -51,11 +51,12 @@ class DrowsinessDetectorApp(App):
         self.setup_alert_sound()
         self.setup_fatigue_sound()
         self.setup_state_variables()
+        logger.info(f"Available cameras: {self.settings.get_available_cameras()}")
 
     def setup_alert_sound(self):
-        default_sound = os.path.join(self.sound_dir, "alert.wav")
+        default_sound = os.path.join(self.sound_alert_dir, "alert.wav")
         sound_path = (
-            os.path.join(self.sound_dir, self.settings.alert_sound_file)
+            os.path.join(self.sound_alert_dir, self.settings.alert_sound_file)
             if self.settings.alert_sound_file
             else default_sound
         )
@@ -258,66 +259,98 @@ class DrowsinessDetectorApp(App):
             pitch_angle = self.last_metrics['pitch_angle']
             blink_count = self.detector.blink_total
             yawn_count = self.detector.yawn_total
-            if frame is not None:
-                texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
-                texture.blit_buffer(cv2.flip(frame, 0).tobytes(), colorfmt='bgr', bufferfmt='ubyte')
-                self.image.texture = texture
-                if self.detector.face_detected:
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    largest_face = self.detector.find_largest_face(self.detector.face_detector(gray))
-                    if largest_face:
-                        shape = self.detector.landmark_predictor(gray, largest_face)
-                        shape_np = np.array([[p.x, p.y] for p in shape.parts()])
-                        left_eye, right_eye = shape_np[36:42], shape_np[42:48]
-                        mouth = shape_np[48:68]
-                        ear = float((self.detector.analyzer.calculate_ear(
-                            left_eye) + self.detector.analyzer.calculate_ear(right_eye)) / 2.0)
-                        mar = float(self.detector.analyzer.calculate_mar(mouth))
-                        roll_angle, pitch_angle = self.detector.analyzer.calculate_head_pose(shape_np)
-                        roll_angle = float(roll_angle)
-                        pitch_angle = float(pitch_angle)
-                        self.last_metrics['ear'] = ear
-                        self.last_metrics['mar'] = mar
-                        self.last_metrics['roll_angle'] = roll_angle
-                        self.last_metrics['pitch_angle'] = pitch_angle
-                        self.last_metrics['blink_count'] = blink_count
-                        self.last_metrics['yawn_count'] = yawn_count
-                main_screen = self.screen_manager.get_screen('main')
-                main_screen.update_metrics(ear, mar, roll_angle, pitch_angle, blink_count, yawn_count)
-                if alert_detected and not self.alert_active:
-                    if self.detector.check_blink_frequency() or self.detector.check_yawn_frequency():
-                        status_text = 'CẢNH BÁO: Dấu hiệu mệt mỏi!'
-                        self.status_label.text = status_text
-                        self.alert_active = True
-                        self.background_color = [1, 0, 0, 1]
-                        self.update_background_color()
-                        logging.info(status_text)
-                        self.start_fatigue_alert()
-                    elif self.detector.eye_counter >= self.detector.ear_consec_frames:
-                        status_text = 'CẢNH BÁO: Phát hiện buồn ngủ!'
-                        self.status_label.text = status_text
-                        self.alert_active = True
-                        self.background_color = [1, 0, 0, 1]
-                        self.update_background_color()
-                        logging.info(status_text)
-                        self.start_alert()
-                    elif self.detector.head_tilt_counter >= self.detector.head_tilt_frames:
-                        status_text = 'CẢNH BÁO: Tư thế đầu bất thường!'
-                        self.status_label.text = status_text
-                        self.alert_active = True
-                        self.background_color = [1, 0, 0, 1]
-                        self.update_background_color()
-                        logging.info(status_text)
-                        self.start_alert()
 
-                elif not alert_detected and self.alert_active and not self.alert_stop_timer:
-                    self.alert_stop_timer = Clock.schedule_once(self.stop_alert, self.alert_stop_delay)
-                elif not self.alert_active:
-                    self.status_label.text = 'Trạng thái: Đang giám sát'
-                    self.background_color = [0, 0, 0, 1]
+            if frame is None:
+                logger.warning("Received None frame from process_frame")
+                self.status_label.text = 'Lỗi: Không lấy được khung hình'
+                main_screen = self.screen_manager.get_screen('main')
+                main_screen.update_metrics(
+                    self.last_metrics['ear'],
+                    self.last_metrics['mar'],
+                    self.last_metrics['roll_angle'],
+                    self.last_metrics['pitch_angle'],
+                    self.last_metrics['blink_count'],
+                    self.last_metrics['yawn_count']
+                )
+                return
+
+            if not isinstance(frame, np.ndarray):
+                logger.error(f"Frame is not a NumPy array, got type {type(frame)}: {frame}")
+                self.status_label.text = 'Lỗi: Khung hình không hợp lệ'
+                main_screen = self.screen_manager.get_screen('main')
+                main_screen.update_metrics(
+                    self.last_metrics['ear'],
+                    self.last_metrics['mar'],
+                    self.last_metrics['roll_angle'],
+                    self.last_metrics['pitch_angle'],
+                    self.last_metrics['blink_count'],
+                    self.last_metrics['yawn_count']
+                )
+                return
+
+            texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
+            texture.blit_buffer(cv2.flip(frame, 0).tobytes(), colorfmt='bgr', bufferfmt='ubyte')
+            self.image.texture = texture
+
+            if self.detector.face_detected:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                largest_face = self.detector.find_largest_face(self.detector.face_detector(gray))
+                if largest_face:
+                    shape = self.detector.landmark_predictor(gray, largest_face)
+                    shape_np = np.array([[p.x, p.y] for p in shape.parts()])
+                    left_eye, right_eye = shape_np[36:42], shape_np[42:48]
+                    mouth = shape_np[48:68]
+                    ear = float((self.detector.analyzer.calculate_ear(
+                        left_eye) + self.detector.analyzer.calculate_ear(right_eye)) / 2.0)
+                    mar = float(self.detector.analyzer.calculate_mar(mouth))
+                    roll_angle, pitch_angle = self.detector.analyzer.calculate_head_pose(shape_np)
+                    roll_angle = float(roll_angle)
+                    pitch_angle = float(pitch_angle)
+                    self.last_metrics['ear'] = ear
+                    self.last_metrics['mar'] = mar
+                    self.last_metrics['roll_angle'] = roll_angle
+                    self.last_metrics['pitch_angle'] = pitch_angle
+                    self.last_metrics['blink_count'] = blink_count
+                    self.last_metrics['yawn_count'] = yawn_count
+
+            main_screen = self.screen_manager.get_screen('main')
+            main_screen.update_metrics(ear, mar, roll_angle, pitch_angle, blink_count, yawn_count)
+
+            if alert_detected and not self.alert_active:
+                if self.detector.check_blink_frequency() or self.detector.check_yawn_frequency():
+                    status_text = 'CẢNH BÁO: Dấu hiệu mệt mỏi!'
+                    self.status_label.text = status_text
+                    self.alert_active = True
+                    self.background_color = [1, 0, 0, 1]
                     self.update_background_color()
+                    logging.info(status_text)
+                    self.start_fatigue_alert()
+                elif self.detector.eye_counter >= self.detector.ear_consec_frames:
+                    status_text = 'CẢNH BÁO: Phát hiện buồn ngủ!'
+                    self.status_label.text = status_text
+                    self.alert_active = True
+                    self.background_color = [1, 0, 0, 1]
+                    self.update_background_color()
+                    logging.info(status_text)
+                    self.start_alert()
+                elif self.detector.head_tilt_counter >= self.detector.head_tilt_frames:
+                    status_text = 'CẢNH BÁO: Tư thế đầu bất thường!'
+                    self.status_label.text = status_text
+                    self.alert_active = True
+                    self.background_color = [1, 0, 0, 1]
+                    self.update_background_color()
+                    logging.info(status_text)
+                    self.start_alert()
+
+            elif not alert_detected and self.alert_active and not self.alert_stop_timer:
+                self.alert_stop_timer = Clock.schedule_once(self.stop_alert, self.alert_stop_delay)
+            elif not self.alert_active:
+                self.status_label.text = 'Trạng thái: Đang giám sát'
+                self.background_color = [0, 0, 0, 1]
+                self.update_background_color()
+
         except Exception as e:
-            logging.error(f"Lỗi xử lý khung hình: {e}")
+            logger.error(f"Lỗi xử lý khung hình: {e}")
             self.status_label.text = 'Lỗi: Xử lý khung hình thất bại'
             self.background_color = [0, 0, 0, 1]
             self.update_background_color()

@@ -13,7 +13,7 @@ class Settings:
         self._alert_volume = 50
         self._alert_sound_file = None  
         self.config = Config()
-        self.sound_dir = self.config.SOUND_DIR
+        self.sound_alert_dir = self.config.SOUND_ALERT_DIR
         self.settings_file = self.config.SETTINGS_FILE
         self.load() 
 
@@ -56,9 +56,9 @@ class Settings:
 
     def get_available_sounds(self):
         """Return a list of available sound files in the sounds directory."""
-        os.makedirs(self.sound_dir, exist_ok=True)
+        os.makedirs(self.sound_alert_dir, exist_ok=True)
         sound_files = ['Mặc định']  # Default sound option
-        for file in os.listdir(self.sound_dir):
+        for file in os.listdir(self.sound_alert_dir):
             if file.lower().endswith(('.wav', '.mp3')):
                 sound_files.append(file)
         return sound_files

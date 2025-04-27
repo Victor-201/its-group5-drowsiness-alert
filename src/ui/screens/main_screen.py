@@ -15,12 +15,13 @@ class StatusBar(Widget):
     angle = NumericProperty(0.0)
     reverse_threshold = BooleanProperty(False)
     bar_color = ListProperty([0, 1, 0, 1])
+    bar_length = NumericProperty(150)  # Thêm thuộc tính bar_length
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(value=self.update_bar, threshold=self.update_bar, angle=self.update_bar,
-                  reverse_threshold=self.update_bar, size=self.update_bar, pos=self.update_bar)
-        self.bar_length = 150
+                  reverse_threshold=self.update_bar, size=self.update_bar, pos=self.update_bar,
+                  bar_length=self.update_bar)  # Bind bar_length
         self.bar_height = 20
         self.blink_state = 1.0
         self.update_bar()
@@ -54,6 +55,82 @@ class MainScreen(Screen):
     def __init__(self, app_instance, **kwargs):
         super().__init__(**kwargs)
         self.app = app_instance
+        # Khởi tạo metrics_widgets
+        self.metrics_widgets = {
+            'ear': {
+                'label': Label(
+                    text='EAR: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=0.4, threshold=self.app.ear_threshold, reverse_threshold=True,
+                                 size_hint=(1, 0.1), bar_length=150)
+            },
+            'mar': {
+                'label': Label(
+                    text='MAR: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=1.0, threshold=0.5, size_hint=(1, 0.1), bar_length=150)
+            },
+            'roll_angle': {
+                'label': Label(
+                    text='Góc nghiêng: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=45.0, threshold=15.0, size_hint=(1, 0.1), bar_length=150)
+            },
+            'pitch_angle': {
+                'label': Label(
+                    text='Góc cúi: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=45.0, threshold=15.0, size_hint=(1, 0.1), bar_length=150)
+            },
+            'blink_count': {
+                'label': Label(
+                    text='Nháy mắt: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1), bar_length=70)
+            },
+            'yawn_count': {
+                'label': Label(
+                    text='Ngáp: --',
+                    size_hint=(1, 0.1),
+                    font_size='20sp',
+                    halign='left',
+                    valign='middle',
+                    text_size=(None, None),
+                    padding_x=10
+                ),
+                'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1), bar_length=70)
+            }
+        }
         self.build()
 
     def build(self):
@@ -62,6 +139,8 @@ class MainScreen(Screen):
             Color(*self.app.background_color)
             self.background_rect = Rectangle(pos=main_layout.pos, size=main_layout.size)
         main_layout.bind(pos=self.update_background_rect, size=self.update_background_rect)
+        
+        # Header với các nút
         header = BoxLayout(size_hint=(1, 0.1), spacing=10)
         buttons = [
             ('Thoát', (1, 0, 0, 1), self.app.exit_app),
@@ -78,90 +157,41 @@ class MainScreen(Screen):
                 on_press=callback
             )
             header.add_widget(button)
+        
+        # Content layout
         content_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.8), spacing=10)
         metrics_layout = BoxLayout(orientation='vertical', size_hint=(0.3, 1), spacing=5)
-        self.metrics_widgets = {
-            'ear': {
-                'label': Label(
-                    text='EAR: --',
-                    size_hint=(1, 0.1),
-                    font_size='20sp',
-                    halign='left',
-                    valign='middle',
-                    text_size=(None, None),
-                    padding_x=10
-                ),
-                'bar': StatusBar(value=0.0, max_value=0.4, threshold=self.app.ear_threshold, reverse_threshold=True,
-                                 size_hint=(1, 0.1))
-            },
-            'mar': {
-                'label': Label(
-                    text='MAR: --',
-                    size_hint=(1, 0.1),
-                    font_size='20sp',
-                    halign='left',
-                    valign='middle',
-                    text_size=(None, None),
-                    padding_x=10
-                ),
-                'bar': StatusBar(value=0.0, max_value=1.0, threshold=0.5, size_hint=(1, 0.1))
-            },
-            'roll_angle': {
-                'label': Label(
-                    text='Góc nghiêng: --',
-                    size_hint=(1, 0.1),
-                    font_size='20sp',
-                    halign='left',
-                    valign='middle',
-                    text_size=(None, None),
-                    padding_x=10
-                ),
-                'bar': StatusBar(value=0.0, max_value=45.0, threshold=15.0, size_hint=(1, 0.1))
-            },
-            'pitch_angle': {
-                'label': Label(
-                    text='Góc cúi: --',
-                    size_hint=(1, 0.1),
-                    font_size='20sp',
-                    halign='left',
-                    valign='middle',
-                    text_size=(None, None),
-                    padding_x=10
-                ),
-                'bar': StatusBar(value=0.0, max_value=45.0, threshold=15.0, size_hint=(1, 0.1))
-            },
-            'blink_count': {
-                'label': Label(
-                    text='Nháy mắt: --',
-                    size_hint=(1, 0.1),
-                    font_size='20sp',
-                    halign='left',
-                    valign='middle',
-                    text_size=(None, None),
-                    padding_x=10
-                ),
-                'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1))
-            },
-            'yawn_count': {
-                'label': Label(
-                    text='Ngáp: --',
-                    size_hint=(1, 0.1),
-                    font_size='20sp',
-                    halign='left',
-                    valign='middle',
-                    text_size=(None, None),
-                    padding_x=10
-                ),
-                'bar': StatusBar(value=0.0, max_value=50.0, threshold=30.0, size_hint=(1, 0.1))
-            }
-        }
-        for metric in self.metrics_widgets.values():
-            metrics_layout.add_widget(metric['label'])
-            metrics_layout.add_widget(metric['bar'])
+        
+        # Thêm các widget cho EAR, MAR, roll_angle, pitch_angle
+        for key in ['ear', 'mar', 'roll_angle', 'pitch_angle']:
+            metrics_layout.add_widget(self.metrics_widgets[key]['label'])
+            metrics_layout.add_widget(self.metrics_widgets[key]['bar'])
+        
+        # Tạo BoxLayout ngang cho blink_count và yawn_count
+        blink_yawn_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.2), spacing=10)  # Khoảng cách 10px
+        
+        # Thêm nhãn và thanh trạng thái cho blink_count
+        blink_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1), spacing=5)
+        blink_layout.add_widget(self.metrics_widgets['blink_count']['label'])
+        blink_layout.add_widget(self.metrics_widgets['blink_count']['bar'])
+        blink_yawn_layout.add_widget(blink_layout)
+        
+        # Thêm nhãn và thanh trạng thái cho yawn_count
+        yawn_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1), spacing=5)
+        yawn_layout.add_widget(self.metrics_widgets['yawn_count']['label'])
+        yawn_layout.add_widget(self.metrics_widgets['yawn_count']['bar'])
+        blink_yawn_layout.add_widget(yawn_layout)
+        
+        # Thêm blink_yawn_layout vào metrics_layout
+        metrics_layout.add_widget(blink_yawn_layout)
+        
+        # Camera layout
         content_layout.add_widget(metrics_layout)
         camera_layout = BoxLayout(size_hint=(0.7, 1))
         camera_layout.add_widget(self.app.image)
         content_layout.add_widget(camera_layout)
+        
+        # Thêm các thành phần vào main_layout
         main_layout.add_widget(header)
         main_layout.add_widget(self.app.status_label)
         main_layout.add_widget(content_layout)
@@ -219,7 +249,7 @@ class MainScreen(Screen):
         self.metrics_widgets['blink_count']['bar'].value = blink_value
         yawn_value = safe_float(yawn_count, 0)
         self.metrics_widgets['yawn_count'][
-            'label'].text = f'Ngáp: {int(yawn_count)}' if yawn_count is not None else 'Ngáp: 0'
+            'label'].text = f'Ngáp: {int(yawn_count)}/min' if yawn_count is not None else 'Ngáp: 0/min'
         self.metrics_widgets['yawn_count']['label'].color = [1, 0, 0,
                                                              1] if is_alert and self.app.detector.check_yawn_frequency() else [
             1, 1, 1, 1]

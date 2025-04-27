@@ -44,11 +44,14 @@ class DrowsinessDetector:
         self.ear_history = deque(maxlen=30)
         self.blink_times = deque(maxlen=100)
         self.fatigue_alert = False
+        self.fatigue_start_time = None
         self.last_reset_time = time.time()
         self.calibration_ear_values = []
+        self.fatigue_alert_count = 0
+        self.notification_duration = self.config.NOTIFICATION_DURATION
 
     def start_camera(self):
-        """Khởi tạo camera với các thông số cấu hình."""
+        """Khởi động camera với các thông số cấu hình."""
         logger.info("Khởi tạo camera...")
         if self.camera and self.camera.isOpened():
             logger.info("Camera đã được khởi tạo, bỏ qua khởi tạo lại")
@@ -83,7 +86,7 @@ class DrowsinessDetector:
         self.ear_history.append(ear)
         
         # Đảm bảo có đủ dữ liệu để xử lý
-        if len(self.ear_history) < 3:
+        if len(self.ear_history) < self.blink_consec_frames:
             return False
         
         # Tính ngưỡng động dựa trên EAR trung bình gần đây
@@ -109,21 +112,27 @@ class DrowsinessDetector:
         Phát hiện ngáp dựa trên MAR (Mouth Aspect Ratio).
         Trả về True nếu phát hiện ngáp, False nếu không.
         """
+        current_time = time.time()
+
         if mar > self.yawn_threshold and not self.mouth_open:
             self.yawn_counter += 1
             if self.yawn_counter >= self.yawn_consec_frames:
-                self.mouth_open = True
-                self.yawn_counter = 0
-                current_time = time.time()
-                self.yawn_total += 1
-                self.yawn_times.append(current_time)
-                logger.debug(f"Ngáp phát hiện, tổng số: {self.yawn_total}")
-                return True
+                # Kiểm tra khoảng cách với lần ngáp gần nhất
+                if not self.yawn_times or (current_time - self.yawn_times[-1] >= 4):
+                    self.mouth_open = True
+                    self.yawn_counter = 0
+                    self.yawn_total += 1
+                    self.yawn_times.append(current_time)
+                    logger.debug(f"Ngáp phát hiện, tổng số: {self.yawn_total}")
+                    return True
+                else:
+                    self.yawn_counter = 0  
         elif mar <= self.yawn_threshold and self.mouth_open:
             self.mouth_open = False
             self.yawn_counter = 0
         else:
             self.yawn_counter = max(0, self.yawn_counter - 1)
+
         return False
 
     def check_yawn_frequency(self):
@@ -132,11 +141,9 @@ class DrowsinessDetector:
         Trả về True nếu vượt ngưỡng, False nếu không.
         """
         current_time = time.time()
-        # Loại bỏ các lần ngáp cũ hơn 60 giây
-        while self.yawn_times and current_time - self.yawn_times[0] > 60:
-            self.yawn_times.popleft()
-        # Tính số lần ngáp trong 60 giây
-        yawns_per_minute = len(self.yawn_times)
+        # Lọc các lần ngáp trong vòng 60 giây qua
+        recent_yawns = [t for t in self.yawn_times if current_time - t <= 60]
+        yawns_per_minute = len(recent_yawns)
         return yawns_per_minute >= self.yawn_per_minute_threshold
 
     def check_blink_frequency(self):
@@ -145,15 +152,31 @@ class DrowsinessDetector:
         Trả về True nếu vượt ngưỡng, False nếu không.
         """
         current_time = time.time()
-        
-        # Loại bỏ các lần nháy mắt cũ hơn 60 giây
-        while self.blink_times and current_time - self.blink_times[0] > 60:
-            self.blink_times.popleft()
-        
-        # Tính số lần nháy mắt trong 60 giây
-        blinks_per_minute = len(self.blink_times)
+        # Lọc các lần nháy mắt trong vòng 60 giây qua
+        recent_blinks = [t for t in self.blink_times if current_time - t <= 60]
+        blinks_per_minute = len(recent_blinks)
         return blinks_per_minute >= self.blink_per_minute_threshold
-
+    
+    def reset_counters_if_needed(self):
+        """
+        Xóa các lần nháy mắt, ngáp và thông báo đã cũ quá 60 giây.
+        """
+        current_time = time.time()
+        if current_time - self.last_reset_time >= 60:
+            # Giữ lại chỉ các lần trong 60 giây gần nhất
+            old_blink_count = len(self.blink_times)
+            old_yawn_count = len(self.yawn_times)
+            old_fatigue_alert_count = self.fatigue_alert_count
+            
+            # Cập nhật lại tổng số
+            self.blink_times.clear()
+            self.yawn_times.clear()
+            self.blink_total = 0
+            self.yawn_total = 0
+            self.fatigue_alert_count = 0
+            self.last_reset_time = current_time
+            logger.info(f"[Reset counters] Blink {old_blink_count} → {self.blink_total}, Yawn {old_yawn_count} → {self.yawn_total}, Fatigue Alerts {old_fatigue_alert_count} → {self.fatigue_alert_count}")
+            
     @staticmethod
     def find_largest_face(faces):
         """Tìm khuôn mặt lớn nhất trong danh sách các khuôn mặt được phát hiện."""
@@ -170,14 +193,30 @@ class DrowsinessDetector:
         return largest_face
 
     def process_frame(self):
+        self.reset_counters_if_needed()
         """Xử lý một khung hình từ camera và phát hiện buồn ngủ, ngáp, hoặc mệt mỏi."""
         if not self.camera or not self.camera.isOpened():
-            logger.error("Camera chưa khởi tạo hoặc đã bị đóng")
-            return None, False
+            logger.error("Camera chưa khởi tạo hoặc đã bị đóng, thử khởi tạo lại")
+            try:
+                self.start_camera()
+            except Exception as e:
+                logger.error(f"Không thể khởi tạo lại camera: {e}")
+                return None, False
+
         ret, frame = self.camera.read()
         if not ret or frame is None:
-            logger.error("Không thể lấy khung hình")
-            return None, False
+            logger.error("Không thể lấy khung hình, thử khởi tạo lại camera")
+            try:
+                self.stop_camera()
+                self.start_camera()
+                ret, frame = self.camera.read()
+                if not ret or frame is None:
+                    logger.error("Vẫn không thể lấy khung hình sau khi khởi tạo lại")
+                    return None, False
+            except Exception as e:
+                logger.error(f"Khởi tạo lại camera thất bại: {e}")
+                return None, False
+
         frame = cv2.resize(frame, (self.config.CAMERA_WIDTH, self.config.CAMERA_HEIGHT))
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.face_detector(gray)
@@ -235,8 +274,13 @@ class DrowsinessDetector:
                 self.drowsiness_start_time = None
             if head_tilt_detected:
                 frame = self.alert_system.render_head_tilt_alert(frame)
-            if fatigue_detected:
+            if fatigue_detected and self.fatigue_alert_count < 1:
+                if self.fatigue_start_time is None:
+                    self.fatigue_start_time = time.time()
                 frame = self.alert_system.render_fatigue_alert(frame)
+                if time.time() - self.fatigue_start_time >= self.notification_duration:
+                    self.fatigue_alert_count += 1
+                    self.fatigue_start_time = None
 
         return frame, drowsiness_detected or head_tilt_detected or fatigue_detected
 

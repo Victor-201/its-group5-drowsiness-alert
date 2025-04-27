@@ -17,7 +17,7 @@ class Config:
     HEAD_TILT_THRESHOLD = 15
     HEAD_TILT_FRAMES = 20
     BLINK_PER_MINUTE_THRESHOLD = 25
-    YAWN_PER_MINUTE_THRESHOLD = 3
+    YAWN_PER_MINUTE_THRESHOLD = 4
     NOTIFICATION_DURATION = 3.0
 
     ALERT_COOLDOWN = 3
@@ -39,10 +39,12 @@ class Config:
     ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
     IMAGE_DIR = os.path.join(ASSETS_DIR, "images")
     SOUND_DIR = os.path.join(ASSETS_DIR, "sounds")
-    ALERT_SOUND_FILE = os.path.join(SOUND_DIR, "alert.wav")
-    FATIGUE_SOUND_FILE = os.path.join(SOUND_DIR, "message.wav")
     FONT_DIR = os.path.join(ASSETS_DIR, "fonts")
+    SOUND_ALERT_DIR = os.path.join(SOUND_DIR, "alerts")
+    SOUND_NOTIFICATION_DIR = os.path.join(SOUND_DIR, "notifications")
     FONT_PATH = os.path.join(FONT_DIR, "arial.ttf")
+    ALERT_SOUND_FILE = os.path.join(SOUND_ALERT_DIR, "alert.wav")
+    FATIGUE_SOUND_FILE = os.path.join(SOUND_NOTIFICATION_DIR, "canh_bao_buon_ngu.mp3")
     FACIAL_LANDMARKS_INDEXES = {
         "right_eye": (36, 42),
         "left_eye": (42, 48),

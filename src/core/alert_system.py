@@ -60,32 +60,33 @@ class AlertSystem:
     def render_notification(self, frame, text):
         """Render a phone-like notification at the top 1/5 of the frame."""
         height = frame.shape[0]
-        notification_height = height // 5
+        notification_height = height // 10
         overlay = frame.copy()
-        # Draw semi-transparent background
-        cv2.rectangle(overlay, (0, 0), (frame.shape[1], notification_height), (50, 50, 50), -1)
+        cv2.rectangle(overlay, (0, 0), (frame.shape[1], notification_height), (0, 0, 255), -1)
         cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
-        # Center text within the notification region
         frame = self.center_text(frame, text, font_size=24, color=self.config.TEXT_COLOR, region_height=notification_height)
         return frame
 
     def render_fatigue_alert(self, frame):
-        """Manage and render notifications for fatigue detection with 3-second duration.
-        """
+        """Manage and render notifications for fatigue detection with 3-second duration."""
         current_time = time.time()
-        self.notification_text = "Bạn đang có dấu hiệu buồn ngủ! Hãy nghỉ ngơi."
-        self.notification_start_time = current_time
-        # Clear expired notification
+        
+        if not self.notification_text and not self.notification_start_time:
+            self.notification_text = "Bạn đang có dấu hiệu buồn ngủ! Hãy nghỉ ngơi."
+            self.notification_start_time = time.time()
+            logger.info("Thông báo buồn ngủ được kích hoạt")
+        
+        # Chỉ render thông báo nếu nó đang active
         if self.notification_text and self.notification_start_time:
-            if current_time - self.notification_start_time > self.notification_duration:
+            if current_time - self.notification_start_time <= self.notification_duration:
+                frame = self.render_notification(frame, self.notification_text)
+            else:
+                # Xóa thông báo sau 3 giây
                 self.notification_text = None
                 self.notification_start_time = None
+                logger.debug("Xóa thông báo buồn ngủ")
         
-        # Render notification if active
-        if self.notification_text and self.notification_start_time:
-            frame = self.render_notification(frame, self.notification_text)
-        
-        return frame, self.notification_text
+        return frame
 
     def render_drowsiness_alert(self, frame, duration=None):
         overlay = frame.copy()
